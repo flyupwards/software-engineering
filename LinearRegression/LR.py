@@ -92,6 +92,7 @@ print(sampledata)
 
 # In[4]:
 
+paddle.enable_static()
 
 #定义张量变量x，表示13维的特征值
 x = fluid.layers.data(name='x', shape=[13], dtype='float32')
