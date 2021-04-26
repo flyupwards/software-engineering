@@ -23,14 +23,15 @@
 
 # In[1]:
 
-
+# import tensorflow as tf
 import paddle.fluid as fluid
 import paddle
 import numpy as np
 import os
 import matplotlib.pyplot as plt
 
-
+# 解决本地报错问题
+paddle.enable_static()
 # # **Step1：准备数据。**
 # 
 # （1）uci-housing数据集介绍
@@ -74,7 +75,7 @@ test_reader = paddle.batch(
 
 
 #用于打印，查看uci_housing数据
-train_data=paddle.dataset.uci_housing.train();
+train_data=paddle.dataset.uci_housing.train()
 sampledata=next(train_data())
 print(sampledata)
 
@@ -97,11 +98,13 @@ print(sampledata)
 x = fluid.layers.data(name='x', shape=[13], dtype='float32')
 #定义张量y,表示目标值
 y = fluid.layers.data(name='y', shape=[1], dtype='float32')
+# 定义隐层
+hidden = fluid.layers.fc(input=x, size=100, act='relu')
 #定义一个简单的线性网络,连接输入和输出的全连接层
 #input:输入tensor;
 #size:该层输出单元的数目
 #act:激活函数
-y_predict=fluid.layers.fc(input=x,size=1,act=None)
+y_predict=fluid.layers.fc(input=hidden,size=1,act=None)
 
 
 # **(2)定义损失函数**
@@ -114,6 +117,7 @@ y_predict=fluid.layers.fc(input=x,size=1,act=None)
 
 
 cost = fluid.layers.square_error_cost(input=y_predict, label=y) #求一个batch的损失值
+# cost = tf.losses.softmax_cross_entropy(y, y_predict)#使用交叉熵代价函数
 avg_cost = fluid.layers.mean(cost)                              #对损失值求平均值
 
 
@@ -124,7 +128,7 @@ avg_cost = fluid.layers.mean(cost)                              #对损失值求
 # In[6]:
 
 
-optimizer = fluid.optimizer.SGDOptimizer(learning_rate=0.001)
+optimizer = fluid.optimizer.SGDOptimizer(learning_rate=0.01)
 opts = optimizer.minimize(avg_cost)
 
 
@@ -176,7 +180,7 @@ feeder = fluid.DataFeeder(place=place, feed_list=[x, y])#feed_list:向模型输�
 # In[10]:
 
 
-iter=0;
+iter=0
 iters=[]
 train_costs=[]
 
@@ -187,6 +191,7 @@ def draw_train_process(iters,train_costs):
     plt.ylabel("cost", fontsize=14)
     plt.plot(iters, train_costs,color='red',label='training cost') 
     plt.grid()
+    plt.savefig('train_result.jpg')
     plt.show()
 
 
@@ -199,8 +204,8 @@ def draw_train_process(iters,train_costs):
 # In[11]:
 
 
-EPOCH_NUM=50
-model_save_dir = "/home/aistudio/work/fit_a_line.inference.model"
+EPOCH_NUM=100
+model_save_dir = "fit_a_line.inference.model"
 
 for pass_id in range(EPOCH_NUM):                                  #训练EPOCH_NUM轮
     # 开始训练并输出最后一个batch的损失值
@@ -209,12 +214,11 @@ for pass_id in range(EPOCH_NUM):                                  #训练EPOCH_N
         train_cost = exe.run(program=fluid.default_main_program(),#运行主程序
                              feed=feeder.feed(data),              #喂入一个batch的训练数据，根据feed_list和data提供的信息，将输入数据转成一种特殊的数据结构
                              fetch_list=[avg_cost])    
-        if batch_id % 40 == 0:
+        if batch_id % 90 == 0:
             print("Pass:%d, Cost:%0.5f" % (pass_id, train_cost[0][0]))    #打印最后一个batch的损失值
         iter=iter+BATCH_SIZE
         iters.append(iter)
         train_costs.append(train_cost[0][0])
-       
    
     # 开始测试并输出最后一个batch的损失值
     test_cost = 0
@@ -261,13 +265,14 @@ groud_truths=[]
 def draw_infer_result(groud_truths,infer_results):
     title='Boston'
     plt.title(title, fontsize=24)
-    x = np.arange(1,20) 
+    x = np.arange(1,30)
     y = x
     plt.plot(x, y)
     plt.xlabel('ground truth', fontsize=14)
     plt.ylabel('infer result', fontsize=14)
     plt.scatter(groud_truths, infer_results,color='green',label='training cost') 
     plt.grid()
+    plt.savefig('line_result.jpg')
     plt.show()
 
 
@@ -278,30 +283,27 @@ def draw_infer_result(groud_truths,infer_results):
 # In[14]:
 
 
-with fluid.scope_guard(inference_scope):#修改全局/默认作用域（scope）, 运行时中的所有变量都将分配给新的scope。
-    #从指定目录中加载 推理model(inference model)
-    [inference_program,                             #推理的program
-     feed_target_names,                             #需要在推理program中提供数据的变量名称
-     fetch_targets] = fluid.io.load_inference_model(#fetch_targets: 推断结果
-                                    model_save_dir, #model_save_dir:模型训练路径 
-                                    infer_exe)      #infer_exe: 预测用executor
-    #获取预测数据
-    infer_reader = paddle.batch(paddle.dataset.uci_housing.test(),  #获取uci_housing的测试数据
-                          batch_size=200)                           #从测试数据中读取一个大小为200的batch数据
-    #从test_reader中分割x
+with fluid.scope_guard(inference_scope):  # 修改全局/默认作用域（scope）, 运行时中的所有变量都将分配给新的scope。
+    # 从指定目录中加载 推理model(inference model)
+    [inference_program,  # 推理的program
+     feed_target_names,  # 需要在推理program中提供数据的变量名称
+     fetch_targets] = fluid.io.load_inference_model(  # fetch_targets: 推断结果
+        model_save_dir,  # model_save_dir:模型训练路径
+        infer_exe)  # infer_exe: 预测用executor
+    # 获取预测数据
+    infer_reader = paddle.batch(paddle.dataset.uci_housing.test(),  # 获取uci_housing的测试数据
+                                batch_size=200)  # 从测试数据中读取一个大小为200的batch数据
+    # 从test_reader中分割x
     test_data = next(infer_reader())
     test_x = np.array([data[0] for data in test_data]).astype("float32")
-    test_y= np.array([data[1] for data in test_data]).astype("float32")
-    results = infer_exe.run(inference_program,                              #预测模型
-                            feed={feed_target_names[0]: np.array(test_x)},  #喂入要预测的x值
-                            fetch_list=fetch_targets)                       #得到推测结果 
-                            
-    print("infer results: (House Price)")
-    for idx, val in enumerate(results[0]):
-        print("%d: %.2f" % (idx, val))
-        infer_results.append(val)
-    print("ground truth:")
-    for idx, val in enumerate(test_y):
-        print("%d: %.2f" % (idx, val))
-        groud_truths.append(val)
-    draw_infer_result(groud_truths,infer_results)
+    test_y = np.array([data[1] for data in test_data]).astype("float32")
+    results = infer_exe.run(inference_program,  # 预测模型
+                            feed={feed_target_names[0]: np.array(test_x)},  # 喂入要预测的x值
+                            fetch_list=fetch_targets)  # 得到推测结果
+
+    print("infer results and ground truth: (House Price)")
+    for idx, val in enumerate(zip(results[0], test_y)):
+        print("%d: infer:%.2f   gt:%.2f" % (idx, val[0], val[1]))
+        infer_results.append(val[0])
+        groud_truths.append(val[1])
+    draw_infer_result(groud_truths, infer_results)
