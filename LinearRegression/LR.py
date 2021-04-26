@@ -265,7 +265,7 @@ groud_truths=[]
 def draw_infer_result(groud_truths,infer_results):
     title='Boston'
     plt.title(title, fontsize=24)
-    x = np.arange(1,20) 
+    x = np.arange(1,30)
     y = x
     plt.plot(x, y)
     plt.xlabel('ground truth', fontsize=14)
